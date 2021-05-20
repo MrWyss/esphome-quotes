@@ -1,0 +1,295 @@
+esphome:
+  name: quotes
+  platform: ESP32
+  board: YOURDEVICE
+  on_boot:
+   priority: -10
+   then:
+     lambda: "id(bin_darkmode).publish_state(true);"
+
+wifi:
+  networks: 
+    - ssid: !secret wifi_sid
+      password: !secret wifi_key
+    - ssid: !secret wifi_sid_2
+      password: !secret wifi_key
+  manual_ip:
+    static_ip: YOURIP
+    gateway: YOURGW
+    subnet: YOURSUBNET
+  domain: YOURDOMAIN
+
+# Enable logging
+logger:
+#  level: VERBOSE
+
+# Enable Home Assistant API
+api:
+  password: !secret esp_pw
+
+ota:
+  password: !secret esp_pw
+
+spi:
+  mosi_pin: GPIO4 #DIN
+  clk_pin: GPIO16
+  
+globals:
+  - id: darkmode_has_value
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+deep_sleep:
+  id: deep_sleep_1
+  run_duration: 1min
+  sleep_duration: 6h
+  wakeup_pin: GPIO12
+  wakeup_pin_mode: KEEP_AWAKE
+  esp32_ext1_wakeup:
+    pins: GPIO12
+    mode: ANY_HIGH 
+
+binary_sensor:
+  - platform: homeassistant
+    name: "Dark Mode"
+    id: "bin_darkmode"
+    entity_id: input_boolean.quote_darkmode
+    on_state:
+      then:
+        lambda: "id(darkmode_has_value) = true;"
+
+sensor:
+  - platform: adc
+    pin: GPIO32
+    name: "E-Paper Battery"
+    id: "battery_level"
+    attenuation: 11db
+    update_interval: 15s
+
+script:
+  - id: show_loading
+    then:
+      - logger.log: 
+          format: "Show loading screen and wait 10 Seconds"
+          tag: "e-paper"
+      - display.page.show: loading
+      - component.update: my_display
+      - delay: 10s
+      
+  - id: wait_for_data
+    then: 
+      - logger.log: 
+          format: "Wait Until there is data"
+          tag: "e-paper"
+      - wait_until:
+          lambda: "return (id(darkmode_has_value));"
+      - logger.log:
+          format: " Got Darkmode: %d"
+          args: ['id(bin_darkmode).state']
+          tag: "e-paper"
+      - wait_until:
+          lambda: "return (id(quote_author).has_state());"
+      - logger.log:
+         format: " Got Author: %s"
+         args: ['id(quote_author).state.c_str()']
+         tag: "e-paper"
+      - wait_until:
+         lambda: "return (id(quote_body).has_state());"
+      - logger.log:
+         format: " Got Body: %s"
+         args: ['id(quote_body).state.c_str()']
+         tag: "e-paper"
+      - wait_until:
+         lambda: "return (id(battery_level).has_state());"
+      - logger.log:
+         format: " Got Battery: %.1f"
+         args: [ 'id(battery_level).state' ]
+         tag: "e-paper"
+      - logger.log: 
+         format: "Got all states"
+         tag: "e-paper"
+         
+  - id: show_quote
+    then: 
+      - logger.log: 
+          format: "Show Quote"
+          tag: "e-paper"
+      - display.page.show: showquote
+      - component.update: my_display
+
+  - id: finalwait
+    then: 
+      - logger.log: 
+         format: "Final wait 20s before sleep"
+         tag: "e-paper"
+      - delay: 20s
+      - logger.log: 
+         format: "ZZZzzzzzZZZZzzzzZZZZzzzzZZZZ"
+         tag: "e-paper"
+      
+text_sensor:
+  - platform: homeassistant
+    name: "Quote Body"
+    id: quote_body
+    internal: true
+    entity_id: input_text.quote_body
+
+  - platform: homeassistant
+    name: "Quote Author"
+    id: quote_author
+    internal: true
+    entity_id: input_text.quote_author
+    on_value: 
+      then:
+        - deep_sleep.prevent: deep_sleep_1
+        - script.execute: show_loading
+        - script.wait: show_loading
+        - script.execute: wait_for_data
+        - script.wait: wait_for_data
+        - script.execute: show_quote
+        - script.wait: show_quote
+        - script.execute: finalwait
+        - script.wait: finalwait
+        - deep_sleep.enter: deep_sleep_1
+
+font:
+  - file: 'fonts/AnonymousPro-Regular.ttf'
+    id: font1
+    glyphs: "«»“”°Ω!?%()+,-_.:;'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz\""
+    size: 55
+  - file: 'fonts/AnonymousPro-Regular.ttf'
+    id: font2
+    size: 15
+    glyphs: "«»°Ω!?%()+,-_.:;'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz\""
+
+display:
+  - platform: waveshare_epaper
+    id: my_display
+    cs_pin: GPIO17
+    dc_pin: GPIO5
+    reset_pin: GPIO18
+    busy_pin: GPIO23
+    rotation: 0
+    update_interval: 1h
+    model: 7.50inV2 #V2=800x480 V1=640px x 384px
+    pages:
+      - id: starting
+        lambda: |- 
+          it.fill((COLOR_OFF)); // Fill all screen
+          it.print(400, 240, id(font1), COLOR_ON, TextAlign::BASELINE_CENTER, "Starting Up.....");
+      - id: loading
+        lambda: |- 
+          it.fill((COLOR_OFF)); // Fill all screen
+          it.print(400, 240, id(font1), COLOR_ON, TextAlign::BASELINE_CENTER, "Loading........");
+      - id: showquote
+        lambda: |-                   
+          /* 
+          ##############################################
+          ########## Fill whole Display ################
+          ##############################################
+          */
+
+          if (id(bin_darkmode).state) {
+            it.fill(COLOR_ON); // Fill all Black
+            it.print(5, 475, id(font2), COLOR_OFF, TextAlign::BASELINE_LEFT, "darkmode");
+          } else {
+            it.fill(COLOR_OFF); // Fill all White
+            it.print(5, 475, id(font2), COLOR_ON, TextAlign::BASELINE_LEFT, "light");
+          }
+         
+          
+          /* 
+          ##############################################
+          ########## Display Quote Body ################
+          ##############################################
+          */
+          
+          std::string val = id(quote_body).state;
+
+          // Break sentence into words (Whitespace Delimiter)
+          char * pch;
+          pch = strtok (&val[0]," ");
+
+          
+          /* Chars per line */
+          int max_line_length = 27;
+          int max_lines = 8;
+          int line_count = 0;
+          /* Horizontal Spaceing */
+          int line_spacing = 50;
+          int lines_length = 0;
+          int current_line_position_length = 0;
+          int next_line_lenght = 0;
+          char *current_word;
+          char *next_word;
+          char *carry_word;
+          bool first_run = true;
+          std::string current_line;
+          while (pch != NULL) // First loop to append a delimiter into a string when max_line_length is reached
+          {
+              current_word = pch;
+              if (first_run) {
+                  current_line_position_length = strlen(current_word) + 1;
+                  first_run = false;
+              } else {
+                  current_line_position_length = current_line_position_length + strlen(current_word) + 1;
+              }
+              pch = strtok(NULL, " ");
+              next_word = pch;
+              if (pch != NULL)
+              {
+                  next_line_lenght = (current_line_position_length + 1 + strlen(next_word));
+                 
+                  if (next_line_lenght <= max_line_length)
+                  {
+                      current_line.append(current_word);
+                      current_line.append(" ");
+                      lines_length = lines_length + strlen(current_word) + 1;
+                  }
+                  else
+                  {
+                      first_run = true;
+                      current_line.append(current_word);
+                      current_line.append("~");                               
+                  }
+              } else {
+                  current_line.append(current_word);
+              }
+          }
+          int y = 0;
+          char *pch_two;
+          pch_two = strtok (&current_line[0],"~");
+          while(pch_two != NULL) // Second loop to print the lines per line broken by the delimiter defined in the first loop
+          {
+            line_count++;
+            if (line_count <= max_lines) {
+              if (id(bin_darkmode).state) {
+                it.printf(5, y, id(font1), COLOR_OFF, TextAlign::LEFT, "%s", pch_two);
+                //it.printf(5, y, id(font2), COLOR_OFF, TextAlign::LEFT, "%i", line_count);
+              } else {
+                it.printf(5, y, id(font1), COLOR_ON, TextAlign::LEFT, "%s", pch_two);
+                //it.printf(5, y, id(font2), COLOR_ON, TextAlign::LEFT, "%i", line_count);
+              }
+              
+            } else {
+              it.printf(0, y, id(font1), COLOR_ON, TextAlign::RIGHT, "...");
+            }
+            pch_two = strtok (NULL, "~");
+            y = y + line_spacing;
+          }
+          
+          /* 
+          ##############################################
+          ########## Display Quote Author ##############
+          ##############################################
+          */
+          std::string author = id(quote_author).state;
+          author.insert(author.begin(), max_line_length - author.length() -1, ' ');
+
+         
+          if (id(bin_darkmode).state) {
+            it.printf(5, 400, id(font1), COLOR_OFF, "%s", author.c_str());
+          } else {
+            it.printf(5, 400, id(font1), COLOR_ON, "%s", author.c_str());
+          }

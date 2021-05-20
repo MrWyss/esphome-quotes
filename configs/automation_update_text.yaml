@@ -1,0 +1,20 @@
+alias: 'Quotes: Update Text'
+description: ''
+trigger:
+  - platform: state
+    entity_id: sensor.they_said_so
+condition: []
+action:
+  - service: input_text.set_value
+    data:
+      value: '- {{ state_attr("sensor.they_said_so", "author") }}'
+    target:
+      entity_id: input_text.quote_author
+  - service: input_text.set_value
+    data:
+      value: >-
+        {{ state_attr("sensor.they_said_so", "quote") |
+        regex_replace(find='\r\n', replace='', ignorecase=False)}}
+    target:
+      entity_id: input_text.quote_body
+mode: single

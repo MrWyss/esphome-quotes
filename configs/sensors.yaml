@@ -1,0 +1,19 @@
+sensor:
+  - platform: rest
+    name: "They said so"
+    resource: "http://quotes.rest/qod.json"
+    json_attributes_path: "$.contents.quotes[0]"
+    value_template: "OK"
+    json_attributes:
+      - author
+      - quote
+    scan_interval: 43200
+
+  - platform: template
+    sensors:
+      theysaidso_quote_body:
+        friendly_name: "They said So Quote Body"
+        value_template: '{{ states.sensor.they_said_so.attributes["quote"] }}'
+      theysaidso_quote_author:
+        friendly_name: "They said so Quote Author"
+        value_template: '{{ states.sensor.they_said_so.attributes["author"] }}'
