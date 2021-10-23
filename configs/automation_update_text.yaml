@@ -1,4 +1,4 @@
-alias: 'Quotes: Update Text'
+alias: 'Quotes: Update Author and Body'
 description: ''
 trigger:
   - platform: state
@@ -11,10 +11,11 @@ action:
     target:
       entity_id: input_text.quote_author
   - service: input_text.set_value
+    target:
+      entity_id: input_text.quote_body
     data:
       value: >-
         {{ state_attr("sensor.they_said_so", "quote") |
-        regex_replace(find='\r\n', replace='', ignorecase=False)}}
-    target:
-      entity_id: input_text.quote_body
-mode: single
+        regex_replace(find='\r\n', replace='', ignorecase=False) |
+        truncate(255)}}
+mode: restart
