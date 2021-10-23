@@ -3,9 +3,18 @@ esphome:
   platform: ESP32
   board: YOURDEVICE
   on_boot:
-   priority: -10
+   priority: -100
    then:
-     lambda: "id(bin_darkmode).publish_state(true);"
+    - lambda: "adc_power_acquire();"
+    - lambda: |-
+        id(wake_up_reason_int) = esp_sleep_get_wakeup_cause();
+    - display.page.show: starting
+    - component.update: my_display
+    - lambda: "id(bin_darkmode).publish_state(true);"
+
+  on_shutdown:
+    then:
+      - lambda: "adc_power_release();"
 
 wifi:
   networks: 
@@ -39,46 +48,109 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
+    
+  - id: wake_up_reason_int
+    type: int
+    restore_value: no
+    initial_value: '0'
+    
+  - id: attribution
+    type: std::string
+    initial_value: '"Powered by quotes from theysaidso.com"'
+
+    
+switch:
+  - platform: safe_mode
+    name: "Quote (Safe Mode)"
 
 deep_sleep:
   id: deep_sleep_1
-  run_duration: 1min
-  sleep_duration: 6h
-  wakeup_pin: GPIO12
-  wakeup_pin_mode: KEEP_AWAKE
+  run_duration: 1min #1min
+  sleep_duration: 6h #6h
   esp32_ext1_wakeup:
     pins: GPIO12
     mode: ANY_HIGH 
 
 binary_sensor:
   - platform: homeassistant
-    name: "Dark Mode"
+    name: "Quote Dark Mode"
     id: "bin_darkmode"
     entity_id: input_boolean.quote_darkmode
     on_state:
       then:
         lambda: "id(darkmode_has_value) = true;"
 
+  - platform: gpio
+    pin: GPIO12
+    name: "Quote Wake Pin"
+    id: wakepin
+    internal: true
+
+    
 sensor:
   - platform: adc
     pin: GPIO32
-    name: "E-Paper Battery"
+    name: "Quote Battery"
     id: "battery_level"
     attenuation: 11db
     update_interval: 15s
+    force_update: true
+    
+  - platform: template
+    name: "Quote Wake Up Reason"
+    id: wake_up_reason
+    lambda: |-
+      return id(wake_up_reason_int) * 1.0;
+
+text_sensor:
+  - platform: homeassistant
+    name: "Quote Body"
+    id: quote_body
+    internal: false
+    entity_id: input_text.quote_body
+
+  - platform: homeassistant
+    name: "Quote Author"
+    id: quote_author
+    internal: false
+    entity_id: input_text.quote_author
+    on_value: 
+      then:
+        - deep_sleep.prevent: deep_sleep_1
+        - script.execute: show_loading
+        - script.wait: show_loading
+        - script.execute: wait_for_data
+        - script.wait: wait_for_data
+        - script.execute: show_quote
+        - script.wait: show_quote
+        - script.execute: finalwait
+        - script.wait: finalwait
+        - deep_sleep.enter: deep_sleep_1
 
 script:
   - id: show_loading
     then:
       - logger.log: 
-          format: "Show loading screen and wait 10 Seconds"
+          format: "Show loading screen and wait 7 Seconds"
           tag: "e-paper"
       - display.page.show: loading
       - component.update: my_display
-      - delay: 10s
+      - delay: 7s
       
   - id: wait_for_data
-    then: 
+    then:
+      - sensor.template.publish:
+          id: wake_up_reason
+          state: !lambda |-
+            return id(wake_up_reason_int) * 1.0;
+      - logger.log:
+         format: "Wake Reason: %d"
+         args: [ 'id(wake_up_reason_int)' ]
+         tag: "e-paper"
+      - logger.log:
+         format: "WakePin: %d"
+         args: [ 'id(wakepin).state' ]
+         tag: "e-paper"
       - logger.log: 
           format: "Wait Until there is data"
           tag: "e-paper"
@@ -121,46 +193,21 @@ script:
   - id: finalwait
     then: 
       - logger.log: 
-         format: "Final wait 20s before sleep"
+         format: "Final wait 7s before sleep"
          tag: "e-paper"
-      - delay: 20s
+      - delay: 7s
       - logger.log: 
          format: "ZZZzzzzzZZZZzzzzZZZZzzzzZZZZ"
          tag: "e-paper"
-      
-text_sensor:
-  - platform: homeassistant
-    name: "Quote Body"
-    id: quote_body
-    internal: true
-    entity_id: input_text.quote_body
-
-  - platform: homeassistant
-    name: "Quote Author"
-    id: quote_author
-    internal: true
-    entity_id: input_text.quote_author
-    on_value: 
-      then:
-        - deep_sleep.prevent: deep_sleep_1
-        - script.execute: show_loading
-        - script.wait: show_loading
-        - script.execute: wait_for_data
-        - script.wait: wait_for_data
-        - script.execute: show_quote
-        - script.wait: show_quote
-        - script.execute: finalwait
-        - script.wait: finalwait
-        - deep_sleep.enter: deep_sleep_1
 
 font:
-  - file: 'fonts/AnonymousPro-Regular.ttf'
+  - file: 'fonts/anonymous-pro.regular.ttf'
     id: font1
     glyphs: "«»“”°Ω!?%()+,-_.:;'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz\""
     size: 55
-  - file: 'fonts/AnonymousPro-Regular.ttf'
+  - file: 'fonts/anonymous-pro.regular.ttf'
     id: font2
-    size: 15
+    size: 22 #15
     glyphs: "«»°Ω!?%()+,-_.:;'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz\""
 
 display:
@@ -171,7 +218,7 @@ display:
     reset_pin: GPIO18
     busy_pin: GPIO23
     rotation: 0
-    update_interval: 1h
+    update_interval: never #1h
     model: 7.50inV2 #V2=800x480 V1=640px x 384px
     pages:
       - id: starting
@@ -187,15 +234,16 @@ display:
           /* 
           ##############################################
           ########## Fill whole Display ################
+          ##########  and attribution   ################
           ##############################################
           */
-
+          
           if (id(bin_darkmode).state) {
             it.fill(COLOR_ON); // Fill all Black
-            it.print(5, 475, id(font2), COLOR_OFF, TextAlign::BASELINE_LEFT, "darkmode");
+            it.print(5, 475, id(font2), COLOR_OFF, TextAlign::BASELINE_LEFT, id(attribution).c_str());
           } else {
             it.fill(COLOR_OFF); // Fill all White
-            it.print(5, 475, id(font2), COLOR_ON, TextAlign::BASELINE_LEFT, "light");
+            it.print(5, 475, id(font2), COLOR_ON, TextAlign::BASELINE_LEFT, id(attribution).c_str());
           }
          
           
@@ -207,7 +255,7 @@ display:
           
           std::string val = id(quote_body).state;
 
-          // Break sentence into words (Whitespace Delimiter)
+          // Break sentence into words (Whitspace Delimiter)
           char * pch;
           pch = strtok (&val[0]," ");
 
@@ -286,8 +334,7 @@ display:
           */
           std::string author = id(quote_author).state;
           author.insert(author.begin(), max_line_length - author.length() -1, ' ');
-
-         
+          
           if (id(bin_darkmode).state) {
             it.printf(5, 400, id(font1), COLOR_OFF, "%s", author.c_str());
           } else {
