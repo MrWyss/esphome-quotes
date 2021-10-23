@@ -8,12 +8,3 @@ sensor:
       - author
       - quote
     scan_interval: 43200
-
-  - platform: template
-    sensors:
-      theysaidso_quote_body:
-        friendly_name: "They said So Quote Body"
-        value_template: '{{ states.sensor.they_said_so.attributes["quote"] }}'
-      theysaidso_quote_author:
-        friendly_name: "They said so Quote Author"
-        value_template: '{{ states.sensor.they_said_so.attributes["author"] }}'
