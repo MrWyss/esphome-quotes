@@ -1,31 +1,34 @@
+type: horizontal-stack
 cards:
-      - type: horizontal-stack
-        cards:
-          - type: vertical-stack
-            cards:
-              - type: entities
-                entities:
-                  - entity: input_boolean.quote_darkmode
-                    secondary_info: last-changed
-                  - entity: sensor.e_paper_battery
-                    secondary_info: last-changed
-                  - entity: input_text.quote_body
-                  - entity: input_text.quote_author
-                  - entity: sensor.theysaidso_quote_author
-                  - entity: sensor.theysaidso_quote_body
-              - type: button
-                tap_action:
-                  action: call-service
-                  service: rest.reload
-                entity: sensor.they_said_so
-                hold_action:
-                  action: more-info
-                icon: 'mdi:update'
-                name: Update Quote
-                icon_height: 80px
-              - type: sensor
-                entity: sensor.e_paper_battery
-                hours_to_show: 24
-                graph: line
-                icon: 'mdi:battery'
-                detail: 2
+  - type: vertical-stack
+    cards:
+      - type: entities
+        entities:
+          - entity: sensor.quote_battery
+            secondary_info: last-updated
+          - entity: input_boolean.quote_darkmode
+          - entity: input_text.quote_body
+          - entity: input_text.quote_author
+          - entity: switch.quote_safe_mode
+          - entity: sensor.quote_author
+          - entity: sensor.quote_body
+          - entity: sensor.quote_wake_up_reason
+        state_color: false
+        show_header_toggle: false
+      - type: button
+        tap_action:
+          action: call-service
+          service: rest.reload
+        entity: sensor.they_said_so
+        hold_action:
+          action: more-info
+        icon: mdi:update
+        name: Update Quote
+        icon_height: 80px
+      - type: sensor
+        entity: sensor.quote_battery
+        hours_to_show: 168
+        icon: mdi:battery
+        detail: 2
+        graph: line
+        name: 7 Days
