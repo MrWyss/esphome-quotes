@@ -28,23 +28,15 @@ Shows daily a new quote, or any text you would like to set via input helpers in 
          - author
          - quote
         scan_interval: 43200
-
-    - platform: template
-        sensors:
-        theysaidso_quote_body:
-            friendly_name: "They said So Quote Body"
-            value_template: '{{ states.sensor.they_said_so.attributes["quote"] }}'
-        theysaidso_quote_author:
-            friendly_name: "They said so Quote Author"
-            value_template: '{{ states.sensor.they_said_so.attributes["author"] }}'
   ```
 
 * Home Assistant Helpers
   * input_boolean.quote_darkmode
-  * input_text.quote_body
-  * input_text.quote_author (255 Max length)
-* Automation
+  * input_text.quote_body (255 Max length)
+  * input_text.quote_author (100 Max length)
+* Automation (reads the rest values and updates the input_text fields)
   * Update Automation [automation_update_text.yaml](./configs/automation_update_text.yaml)
+  
 * Lovelace Card
   * [card.yaml](./configs/card.yaml)
 
@@ -57,6 +49,6 @@ let me know, if something is missing.
 
 ## Known Issues
 
-* [ ] Buggy lambda code
-* [ ] Battery Consumption
+* [x] Buggy lambda code
+* [x] Battery Consumption (pretty ok now)
 * [ ] Battery metering is inaccurate with the voltage divider
